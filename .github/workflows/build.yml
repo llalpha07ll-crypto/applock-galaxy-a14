@@ -1,0 +1,46 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK (optional)
+        uses: android-actions/setup-android@v3
+        continue-on-error: true
+
+      - name: Accept Android licenses
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Build debug APK
+        run: |
+          mkdir -p /tmp/proj
+          ZIP=$(find . -name '*.zip' | head -n 1)
+          echo "Zip found: $ZIP"
+          unzip -q -o "$ZIP" -d /tmp/proj
+          G=$(find /tmp/proj -name gradlew | head -n 1)
+          echo "gradlew: $G"
+          cd "$(dirname "$G")"
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Collect APK
+        run: |
+          mkdir -p /tmp/out
+          cp "$(find /tmp/proj -name app-debug.apk | head -n 1)" /tmp/out/app-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-lock-apk
+          path: /tmp/out/app-debug.apk
