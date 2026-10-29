@@ -14,17 +14,22 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Extract Uploaded Zip File
+    - name: Extract Project Zip
       run: |
+        echo "Searching for uploaded zip file..."
         ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
         if [ -z "$ZIP_FILE" ]; then
-          echo "No zip file found!"
+          echo "ERROR: Repository me koi bhi .zip file nahi mili!"
           exit 1
         fi
+        echo "Found zip: $ZIP_FILE. Extracting..."
         unzip -o "$ZIP_FILE"
+
+        # Subfolder check
         if [ ! -f "build.gradle.kts" ] && [ ! -f "build.gradle" ]; then
           SUBDIR=$(find . -maxdepth 2 -name "build.gradle*" -exec dirname {} \; | head -n 1)
           if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "." ]; then
+            echo "Moving files from $SUBDIR to root..."
             cp -r $SUBDIR/* .
           fi
         fi
@@ -34,19 +39,32 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
 
-    - name: Make Gradlew Executable
+    - name: Auto-Fix Gradle Config & Wrapper
       run: |
+        # 1. Root build.gradle.kts me explicit version set karein
+        cat << 'EOF' > build.gradle.kts
+        plugins {
+            id("com.android.application") version "8.2.2" apply false
+            id("org.jetbrains.kotlin.android") version "1.9.22" apply false
+        }
+        EOF
+
+        # 2. Wrapper jar download karein
+        mkdir -p gradle/wrapper
         if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-          gradle wrapper
+          echo "Downloading gradle-wrapper.jar..."
+          curl -sLo gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.4.0/gradle/wrapper/gradle-wrapper.jar
         fi
         chmod +x gradlew
 
-    - name: Compile and Build Android APK
-      run: ./gradlew assembleDebug --no-daemon
+    - name: Set up Gradle Action
+      uses: gradle/actions/setup-gradle@v3
 
-    - name: Upload APK File
+    - name: Compile and Build Android APK
+      run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+    - name: Upload APK as Artifact
       uses: actions/upload-artifact@v4
       with:
         name: Samsung-GalaxyA14-AppLock-APK
