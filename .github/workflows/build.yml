@@ -14,16 +14,20 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Extract Project Zip
+    - name: Extract Project Zip from Any Folder
       run: |
-        echo "Searching for uploaded zip file..."
-        ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
+        echo "Searching for uploaded zip file across all directories..."
+        # Pura repository scan karega chahe zip kisi bhi folder me ho
+        ZIP_FILE=$(find . -name "*.zip" | head -n 1)
+        
         if [ -z "$ZIP_FILE" ]; then
           echo "ERROR: Repository me koi bhi .zip file nahi mili!"
           exit 1
         fi
-        echo "Found zip: $ZIP_FILE. Extracting..."
-        unzip -o "$ZIP_FILE"
+        
+        echo "Found zip file at: $ZIP_FILE"
+        echo "Extracting directly to project root..."
+        unzip -o "$ZIP_FILE" -d .
 
         # Subfolder check
         if [ ! -f "build.gradle.kts" ] && [ ! -f "build.gradle" ]; then
@@ -42,7 +46,7 @@ jobs:
 
     - name: Auto-Fix Gradle Config & Wrapper
       run: |
-        # 1. Root build.gradle.kts me explicit version set karein
+        # Root build.gradle.kts me explicit version set karein
         cat << 'EOF' > build.gradle.kts
         plugins {
             id("com.android.application") version "8.2.2" apply false
@@ -50,7 +54,7 @@ jobs:
         }
         EOF
 
-        # 2. Wrapper jar download karein
+        # Wrapper jar download karein
         mkdir -p gradle/wrapper
         if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
           echo "Downloading gradle-wrapper.jar..."
