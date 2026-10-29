@@ -16,24 +16,18 @@ jobs:
 
     - name: Extract Project Zip from Any Folder
       run: |
-        echo "Searching for uploaded zip file across all directories..."
-        # Pura repository scan karega chahe zip kisi bhi folder me ho
+        echo "Searching for uploaded zip file..."
         ZIP_FILE=$(find . -name "*.zip" | head -n 1)
-        
         if [ -z "$ZIP_FILE" ]; then
           echo "ERROR: Repository me koi bhi .zip file nahi mili!"
           exit 1
         fi
-        
-        echo "Found zip file at: $ZIP_FILE"
-        echo "Extracting directly to project root..."
+        echo "Found zip file at: $ZIP_FILE. Extracting..."
         unzip -o "$ZIP_FILE" -d .
 
-        # Subfolder check
         if [ ! -f "build.gradle.kts" ] && [ ! -f "build.gradle" ]; then
           SUBDIR=$(find . -maxdepth 2 -name "build.gradle*" -exec dirname {} \; | head -n 1)
           if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "." ]; then
-            echo "Moving files from $SUBDIR to root..."
             cp -r $SUBDIR/* .
           fi
         fi
@@ -44,9 +38,9 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Auto-Fix Gradle Config & Wrapper
+    - name: Auto-Fix Gradle Config & Missing Mipmap Resources
       run: |
-        # Root build.gradle.kts me explicit version set karein
+        # 1. Root build.gradle.kts version fix
         cat << 'EOF' > build.gradle.kts
         plugins {
             id("com.android.application") version "8.2.2" apply false
@@ -54,10 +48,43 @@ jobs:
         }
         EOF
 
-        # Wrapper jar download karein
+        # 2. Settings.gradle.kts repository configuration
+        cat << 'EOF' > settings.gradle.kts
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        rootProject.name = "AppLockPro"
+        include(":app")
+        EOF
+
+        # 3. Create missing mipmap icons so AAPT2 links cleanly
+        mkdir -p app/src/main/res/mipmap-anydpi-v26
+        cat << 'EOF' > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+        <?xml version="1.0" encoding="utf-8"?>
+        <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+            <background android:drawable="@drawable/glass_badge_bg"/>
+            <foreground android:drawable="@drawable/ic_fingerprint_vector"/>
+        </adaptive-icon>
+        EOF
+        cp app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+
+        # 4. Proguard rules file
+        touch app/proguard-rules.pro
+
+        # 5. Wrapper jar download if missing
         mkdir -p gradle/wrapper
         if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-          echo "Downloading gradle-wrapper.jar..."
           curl -sLo gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.4.0/gradle/wrapper/gradle-wrapper.jar
         fi
         chmod +x gradlew
